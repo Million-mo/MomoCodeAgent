@@ -80,9 +80,352 @@
 - 输入：分析后的结果集
 - 输出：最终响应
 
-## 3. 技术选型
+## 3. 检索上下文设计
 
-### 3.1 后端技术栈
+### 3.1 上下文架构概述
+
+检索上下文是Agent架构搜索引擎的核心组件，通过整合多维度的背景信息，显著提升系统的理解能力和检索效果。上下文设计采用分层架构，支持动态更新和智能融合。
+
+### 3.2 上下文组成架构
+
+```mermaid
+graph TB
+    subgraph "检索上下文层"
+        QC[查询意图上下文]
+        CC[代码库上下文]
+        DC[用户开发上下文]
+        SC[会话上下文]
+        TC[技术上下文]
+    end
+    
+    subgraph "上下文融合层"
+        CF[上下文融合器]
+        CP[上下文优先级管理]
+        CV[上下文验证器]
+    end
+    
+    subgraph "Agent核心层"
+        IA[Intent Agent]
+        SA[Search Agent]
+        AA[Analysis Agent]
+    end
+    
+    QC --> CF
+    CC --> CF
+    DC --> CF
+    SC --> CF
+    TC --> CF
+    
+    CF --> CP
+    CP --> CV
+    CV --> IA
+    CV --> SA
+    CV --> AA
+```
+
+### 3.3 核心上下文类型
+
+#### 3.3.1 查询意图上下文（Query Intent Context）
+
+**核心成分：**
+- **开发意图类型**：代码查找、功能理解、问题诊断、重构建议、架构分析
+- **查询复杂度**：简单查找、探索性搜索、复杂分析
+- **目标代码类型**：函数、类、模块、配置文件、测试代码
+- **查询语义**：用户真正想要获取的信息或完成的任务
+
+**构建策略：**
+- 通过Intent Agent分析用户查询的深层意图
+- 结合代码库结构理解用户可能的开发目标
+- 基于查询模式识别用户的开发阶段
+
+**数据模型：**
+```python
+class QueryIntentContext:
+    intent_type: str  # search, analyze, debug, refactor, explore
+    complexity_level: int  # 1-5, 5最复杂
+    target_code_types: List[str]  # function, class, module, etc.
+    semantic_meaning: str  # 查询的语义含义
+    development_stage: str  # development, debugging, refactoring, learning
+    confidence_score: float  # 意图识别的置信度
+```
+
+#### 3.3.2 代码库上下文（Codebase Context）
+
+**核心成分：**
+- **项目结构**：目录结构、模块组织、依赖关系
+- **技术栈信息**：编程语言、框架、库、工具链
+- **代码质量指标**：复杂度、测试覆盖率、文档完整性
+- **变更历史**：最近的代码变更、热点文件、活跃模块
+
+**构建策略：**
+- 通过AST解析器理解代码结构
+- 利用图数据库存储代码依赖关系
+- 分析Git历史了解代码演进
+
+**数据模型：**
+```python
+class CodebaseContext:
+    project_structure: Dict[str, Any]  # 项目结构信息
+    tech_stack: List[str]  # 技术栈信息
+    code_quality_metrics: Dict[str, float]  # 代码质量指标
+    change_history: List[ChangeEvent]  # 变更历史
+    hot_files: List[str]  # 热点文件
+    active_modules: List[str]  # 活跃模块
+    dependency_graph: Dict[str, List[str]]  # 依赖关系图
+```
+
+#### 3.3.3 用户开发上下文（Developer Context）
+
+**核心成分：**
+- **当前工作状态**：正在编辑的文件、光标位置、最近查看的代码
+- **开发历史**：最近的搜索记录、访问的文件、修改的代码
+- **专业领域**：用户的技术背景、常用模式、偏好设置
+- **任务上下文**：当前开发任务、项目阶段、团队协作状态
+
+**构建策略：**
+- 通过IDE集成获取实时开发状态
+- 分析用户行为模式构建开发者画像
+- 结合项目上下文理解用户当前任务
+
+**数据模型：**
+```python
+class DeveloperContext:
+    current_file: Optional[str]  # 当前编辑文件
+    cursor_position: Optional[Tuple[int, int]]  # 光标位置
+    recent_files: List[str]  # 最近访问的文件
+    search_history: List[SearchRecord]  # 搜索历史
+    modification_history: List[ModificationRecord]  # 修改历史
+    skill_profile: Dict[str, float]  # 技能画像
+    preferences: Dict[str, Any]  # 用户偏好
+    current_task: Optional[str]  # 当前任务
+    team_context: Dict[str, Any]  # 团队协作上下文
+```
+
+#### 3.3.4 会话上下文（Session Context）
+
+**核心成分：**
+- **对话历史**：当前会话中的查询序列和结果
+- **上下文连贯性**：保持对话的逻辑连贯性
+- **探索路径**：用户的代码探索路径和发现过程
+- **反馈信息**：用户对搜索结果的反馈和调整
+
+**构建策略：**
+- 维护会话状态和对话历史
+- 跟踪用户的探索路径和发现过程
+- 收集用户反馈优化后续搜索
+
+**数据模型：**
+```python
+class SessionContext:
+    session_id: str  # 会话ID
+    query_sequence: List[Query]  # 查询序列
+    result_history: List[SearchResult]  # 结果历史
+    exploration_path: List[str]  # 探索路径
+    user_feedback: List[Feedback]  # 用户反馈
+    context_coherence: float  # 上下文连贯性评分
+    session_duration: int  # 会话持续时间
+    interaction_count: int  # 交互次数
+```
+
+#### 3.3.5 技术上下文（Technical Context）
+
+**核心成分：**
+- **代码语义**：函数签名、类结构、接口定义
+- **依赖关系**：导入关系、调用关系、继承关系
+- **运行时上下文**：配置信息、环境变量、运行时状态
+- **测试上下文**：测试用例、测试数据、测试环境
+
+**构建策略：**
+- 通过语义分析理解代码含义
+- 利用图算法分析代码依赖关系
+- 结合配置文件理解运行时环境
+
+**数据模型：**
+```python
+class TechnicalContext:
+    code_semantics: Dict[str, Any]  # 代码语义信息
+    dependency_relations: Dict[str, List[str]]  # 依赖关系
+    runtime_context: Dict[str, Any]  # 运行时上下文
+    test_context: Dict[str, Any]  # 测试上下文
+    configuration: Dict[str, Any]  # 配置信息
+    environment_variables: Dict[str, str]  # 环境变量
+    api_definitions: List[APIDefinition]  # API定义
+```
+
+### 3.4 上下文融合机制
+
+#### 3.4.1 融合策略
+
+**多维度信息融合：**
+```mermaid
+flowchart TD
+    A[查询意图上下文] --> E[上下文融合器]
+    B[代码库上下文] --> E
+    C[用户开发上下文] --> E
+    D[会话上下文] --> E
+    F[技术上下文] --> E
+    
+    E --> G[权重计算]
+    G --> H[信息整合]
+    H --> I[冲突解决]
+    I --> J[最终上下文]
+    
+    J --> K[Intent Agent]
+    J --> L[Search Agent]
+    J --> M[Analysis Agent]
+```
+
+**融合算法：**
+```python
+class ContextFusion:
+    def fuse_contexts(self, contexts: Dict[str, Any]) -> FusedContext:
+        # 1. 计算各上下文权重
+        weights = self.calculate_weights(contexts)
+        
+        # 2. 信息整合
+        fused_info = self.integrate_information(contexts, weights)
+        
+        # 3. 冲突解决
+        resolved_info = self.resolve_conflicts(fused_info)
+        
+        # 4. 生成最终上下文
+        return FusedContext(
+            intent_context=resolved_info['intent'],
+            codebase_context=resolved_info['codebase'],
+            developer_context=resolved_info['developer'],
+            session_context=resolved_info['session'],
+            technical_context=resolved_info['technical'],
+            fusion_metadata=self.generate_metadata(contexts, weights)
+        )
+```
+
+#### 3.4.2 优先级管理
+
+**优先级策略：**
+- **高优先级**：当前查询意图、正在编辑的文件、会话历史
+- **中优先级**：用户偏好、代码库热点、技术上下文
+- **低优先级**：历史行为、项目统计、长期趋势
+
+**动态调整机制：**
+```python
+class PriorityManager:
+    def calculate_priority(self, context_type: str, context_data: Any) -> float:
+        base_priority = self.get_base_priority(context_type)
+        recency_factor = self.calculate_recency_factor(context_data)
+        relevance_factor = self.calculate_relevance_factor(context_data)
+        user_preference_factor = self.get_user_preference_factor(context_type)
+        
+        return base_priority * recency_factor * relevance_factor * user_preference_factor
+```
+
+### 3.5 上下文更新机制
+
+#### 3.5.1 实时更新
+
+**更新触发条件：**
+- 用户查询变化
+- 代码文件修改
+- 用户行为变化
+- 会话状态变化
+
+**更新策略：**
+```mermaid
+graph TD
+    A[更新触发] --> B{更新类型}
+    B -->|增量更新| C[增量上下文更新]
+    B -->|全量更新| D[全量上下文重建]
+    
+    C --> E[上下文验证]
+    D --> E
+    E --> F[一致性检查]
+    F --> G[更新完成]
+    
+    H[更新失败] --> I[回滚机制]
+    I --> J[错误处理]
+```
+
+#### 3.5.2 一致性保证
+
+**一致性策略：**
+- **乐观锁机制**：基于版本号的并发控制
+- **最终一致性**：定期检查和修复数据不一致
+- **冲突检测**：自动识别和解决更新冲突
+- **数据修复**：自动修复损坏或不一致的数据
+
+### 3.6 上下文应用场景
+
+#### 3.6.1 精确查找场景
+
+**上下文重点：**
+- 查询意图上下文（高权重）
+- 代码库上下文（中权重）
+- 用户开发上下文（中权重）
+
+**应用策略：**
+- 快速定位目标代码
+- 减少探索成本
+- 提供精确匹配结果
+
+#### 3.6.2 探索性搜索场景
+
+**上下文重点：**
+- 会话上下文（高权重）
+- 代码库上下文（高权重）
+- 技术上下文（中权重）
+
+**应用策略：**
+- 引导用户探索路径
+- 发现相关代码模块
+- 提供上下文相关的建议
+
+#### 3.6.3 问题诊断场景
+
+**上下文重点：**
+- 技术上下文（高权重）
+- 代码库上下文（高权重）
+- 用户开发上下文（中权重）
+
+**应用策略：**
+- 定位问题根源
+- 提供解决方案
+- 关联相关错误信息
+
+#### 3.6.4 重构建议场景
+
+**上下文重点：**
+- 代码库上下文（高权重）
+- 用户开发上下文（高权重）
+- 技术上下文（中权重）
+
+**应用策略：**
+- 分析代码质量
+- 提供个性化建议
+- 考虑用户技能水平
+
+### 3.7 上下文性能优化
+
+#### 3.7.1 缓存策略
+
+**缓存层次：**
+- **L1缓存**：当前会话上下文（内存）
+- **L2缓存**：用户画像上下文（Redis）
+- **L3缓存**：代码库上下文（分布式缓存）
+
+**缓存更新：**
+- **实时更新**：关键上下文信息
+- **延迟更新**：非关键上下文信息
+- **批量更新**：定期批量更新
+
+#### 3.7.2 压缩存储
+
+**压缩策略：**
+- **语义压缩**：去除冗余信息
+- **时间压缩**：保留关键时间点
+- **空间压缩**：使用高效数据结构
+
+## 4. 技术选型
+
+### 4.1 后端技术栈
 
 | 组件 | 技术选型 | 理由 |
 |------|----------|------|
@@ -96,7 +439,7 @@
 | 消息队列 | RabbitMQ | 可靠的消息传递 |
 | 容器化 | Docker + Kubernetes | 微服务部署和扩展 |
 
-### 3.2 前端技术栈
+### 4.2 前端技术栈
 
 | 组件 | 技术选型 | 理由 |
 |------|----------|------|
@@ -106,7 +449,7 @@
 | 构建工具 | Vite | 快速的开发构建 |
 | 图表库 | ECharts | 强大的数据可视化能力 |
 
-### 3.3 AI/ML技术栈
+### 4.3 AI/ML技术栈
 
 | 组件 | 技术选型 | 理由 |
 |------|----------|------|
@@ -115,9 +458,9 @@
 | LLM集成 | OpenAI GPT-4 / Ollama | 强大的语言理解能力 |
 | 向量化 | FAISS | 高效的向量相似性搜索 |
 
-## 4. 数据模型设计
+## 5. 数据模型设计
 
-### 4.1 代码实体模型
+### 5.1 代码实体模型
 
 ```python
 class CodeEntity:
@@ -136,7 +479,7 @@ class CodeEntity:
     updated_at: datetime
 ```
 
-### 4.2 查询模型
+### 5.2 查询模型
 
 ```python
 class Query:
@@ -149,7 +492,7 @@ class Query:
     created_at: datetime
 ```
 
-### 4.3 检索结果模型
+### 5.3 检索结果模型
 
 ```python
 class SearchResult:
@@ -161,7 +504,7 @@ class SearchResult:
     explanation: str  # 匹配原因说明
 ```
 
-### 4.4 动态更新相关模型
+### 5.4 动态更新相关模型
 
 ```python
 class FileChangeEvent:
@@ -206,9 +549,9 @@ class IndexStatus:
     dependencies: List[str]
 ```
 
-## 5. Agentic搜索流程设计
+## 6. Agentic搜索流程设计
 
-### 5.1 整体搜索流程架构
+### 6.1 整体搜索流程架构
 
 ```mermaid
 graph TD
@@ -234,7 +577,7 @@ graph TD
     O --> P[Knowledge Base Update]
 ```
 
-### 5.2 核心Agent职责分工
+### 6.2 核心Agent职责分工
 
 | Agent | 主要职责 | 输入 | 输出 |
 |-------|----------|------|------|
@@ -245,7 +588,7 @@ graph TD
 | **Response Generation Agent** | 响应生成和格式化 | 分析后的结果 | 用户友好的响应 |
 | **Learning Agent** | 持续学习和优化 | 用户反馈 | 模型更新 |
 
-### 5.3 搜索策略决策流程
+### 6.3 搜索策略决策流程
 
 ```mermaid
 flowchart TD
@@ -269,7 +612,7 @@ flowchart TD
     M --> N[结果输出]
 ```
 
-### 5.4 多Agent协调机制
+### 6.4 多Agent协调机制
 
 ```mermaid
 sequenceDiagram
@@ -293,7 +636,7 @@ sequenceDiagram
     RGA->>U: 最终响应
 ```
 
-### 5.5 学习反馈循环
+### 6.5 学习反馈循环
 
 ```mermaid
 graph LR
@@ -310,7 +653,7 @@ graph LR
     J --> F
 ```
 
-### 5.6 智能搜索策略
+### 6.6 智能搜索策略
 
 **策略选择机制**
 - **特征分析**：基于查询长度、关键词密度、语法复杂度等特征
@@ -332,7 +675,7 @@ graph TD
     D -->|否| H
 ```
 
-### 5.7 多Agent协调机制
+### 6.7 多Agent协调机制
 
 **协调策略**
 - **任务分解**：将复杂查询分解为多个子任务
@@ -346,7 +689,7 @@ graph TD
 - **协商机制**：Agent间的冲突解决和共识达成
 - **状态同步**：实时同步Agent状态和进度
 
-### 5.8 学习适应机制
+### 6.8 学习适应机制
 
 **学习类型**
 - **监督学习**：基于用户反馈的模型训练
@@ -360,9 +703,9 @@ graph TD
 - **上下文反馈**：基于用户画像和历史行为的反馈
 - **质量反馈**：搜索结果的相关性和准确性评估
 
-## 6. 核心算法设计
+## 7. 核心算法设计
 
-### 6.1 多层级检索算法
+### 7.1 多层级检索算法
 
 ```python
 class MultiLevelSearch:
@@ -380,7 +723,7 @@ class MultiLevelSearch:
         return self.merge_and_rank(semantic_results, keyword_results, structural_results)
 ```
 
-### 5.9 具体搜索场景
+### 6.9 具体搜索场景
 
 **场景分类**
 - **精确查找**：用户明确知道要找的函数、类、变量等
@@ -408,7 +751,7 @@ graph TD
     J --> K
 ```
 
-### 5.10 智能决策引擎
+### 6.10 智能决策引擎
 
 **决策机制**
 - **特征提取**：从查询和上下文中提取关键特征
@@ -422,7 +765,7 @@ graph TD
 - **实时状态**：监控代码库和系统状态
 - **历史分析**：分析用户查询历史模式
 
-### 5.11 自适应学习机制
+### 6.11 自适应学习机制
 
 **学习策略**
 - **在线学习**：实时从用户交互中学习
@@ -436,9 +779,9 @@ graph TD
 - **质量反馈**：搜索结果质量评估
 - **性能反馈**：系统性能指标监控
 
-## 6. 核心算法设计
+## 7. 核心算法设计
 
-### 6.1 多层级检索算法流程
+### 7.1 多层级检索算法流程
 
 ```mermaid
 flowchart TD
@@ -461,7 +804,7 @@ flowchart TD
     K --> L[最终结果]
 ```
 
-### 6.2 意图理解算法流程
+### 7.2 意图理解算法流程
 
 ```mermaid
 graph TD
@@ -478,7 +821,7 @@ graph TD
     H --> I[结构化查询]
 ```
 
-### 6.3 深度检索算法流程
+### 7.3 深度检索算法流程
 
 ```mermaid
 flowchart TD
@@ -490,9 +833,9 @@ flowchart TD
     F --> G[深度搜索结果]
 ```
 
-## 6. 动态更新机制
+## 8. 动态更新机制
 
-### 6.1 代码变更检测流程
+### 8.1 代码变更检测流程
 
 ```mermaid
 flowchart TD
@@ -507,7 +850,7 @@ flowchart TD
     G --> H[批量处理]
 ```
 
-### 6.2 增量索引更新流程
+### 8.2 增量索引更新流程
 
 ```mermaid
 graph TD
@@ -528,7 +871,7 @@ graph TD
     J --> K
 ```
 
-### 6.3 实时同步机制
+### 8.3 实时同步机制
 
 **同步策略**
 - **WebSocket推送**：实时向客户端推送更新状态
@@ -536,7 +879,7 @@ graph TD
 - **多频道支持**：支持不同类型的变更通知
 - **客户端管理**：维护连接状态和订阅关系
 
-### 6.4 冲突解决和一致性保证
+### 8.4 冲突解决和一致性保证
 
 **一致性策略**
 - **乐观锁机制**：基于版本号的并发控制
@@ -544,7 +887,7 @@ graph TD
 - **冲突检测**：自动识别和解决更新冲突
 - **数据修复**：自动修复损坏或不一致的数据
 
-### 6.5 性能优化策略
+### 8.5 性能优化策略
 
 **优化机制**
 - **批量处理**：将多个更新操作合并处理
@@ -552,26 +895,26 @@ graph TD
 - **缓存策略**：避免重复处理未变更的文件
 - **并行处理**：多线程并行处理不同类型的更新
 
-## 7. 性能优化策略
+## 9. 性能优化策略
 
-### 7.1 索引优化
+### 9.1 索引优化
 - **分层索引**：按代码类型和语言分别建立索引
 - **增量更新**：支持代码变更的增量索引更新
 - **压缩存储**：使用高效的压缩算法减少存储空间
 
-### 7.2 查询优化
+### 9.2 查询优化
 - **查询缓存**：缓存常见查询结果
 - **并行处理**：多线程并行执行不同类型的检索
 - **结果预取**：预测用户可能的后续查询
 
-### 7.3 系统优化
+### 9.3 系统优化
 - **负载均衡**：多实例部署，智能负载分配
 - **CDN加速**：静态资源CDN分发
 - **数据库优化**：读写分离，索引优化
 
-## 8. 部署架构
+## 10. 部署架构
 
-### 8.1 微服务架构
+### 10.1 微服务架构
 
 ```mermaid
 graph TB
@@ -607,7 +950,7 @@ graph TB
     IS --> GS
 ```
 
-### 8.2 容器化部署
+### 10.2 容器化部署
 
 **服务组件**
 - **API Gateway**：统一入口，负载均衡，认证授权
@@ -621,7 +964,7 @@ graph TB
 - **滚动更新**：零停机部署
 - **资源限制**：CPU和内存限制
 
-### 8.3 动态更新服务
+### 10.3 动态更新服务
 
 **服务配置**
 - **File Watcher**：监控文件变更，支持批量处理
@@ -634,9 +977,9 @@ graph TB
 - **批处理大小**：优化处理性能
 - **检查间隔**：一致性检查频率
 
-## 9. 监控和运维
+## 11. 监控和运维
 
-### 9.1 监控指标
+### 11.1 监控指标
 
 **性能指标**
 - **响应时间**：API响应时间、搜索延迟
@@ -660,7 +1003,7 @@ graph TB
 - **一致性检查结果**：数据一致性状态
 - **更新失败率**：更新操作失败比例
 
-### 9.2 日志管理
+### 11.2 日志管理
 
 **日志策略**
 - **结构化日志**：JSON格式，便于分析
@@ -674,7 +1017,7 @@ graph TB
 - **历史分析**：长期趋势分析
 - **可视化**：日志数据可视化展示
 
-### 9.3 告警机制
+### 11.3 告警机制
 
 **告警规则**
 - **性能告警**：响应时间超过阈值
@@ -688,7 +1031,7 @@ graph TB
 - **Slack集成**：团队协作平台通知
 - **Webhook**：自定义告警处理
 
-### 9.4 安全考虑
+### 11.4 安全考虑
 
 **API安全**
 - **JWT认证**：基于Token的身份验证
@@ -708,9 +1051,9 @@ graph TB
 - **VPN**：安全远程访问
 - **DDoS防护**：分布式拒绝服务攻击防护
 
-## 10. 扩展性设计
+## 12. 扩展性设计
 
-### 10.1 水平扩展
+### 12.1 水平扩展
 
 **服务扩展**
 - **无状态设计**：所有服务设计为无状态，支持水平扩展
@@ -722,7 +1065,7 @@ graph TB
 - **缓存集群**：Redis集群模式，支持数据分片
 - **存储扩展**：支持分布式存储系统
 
-### 10.2 功能扩展
+### 12.2 功能扩展
 
 **插件机制**
 - **检索插件**：支持自定义检索算法
@@ -739,9 +1082,9 @@ graph TB
 - **Webhook支持**：支持第三方系统集成
 - **SDK提供**：多语言SDK支持
 
-## 11. 开发计划
+## 13. 开发计划
 
-### 11.1 MVP阶段（1-2个月）
+### 13.1 MVP阶段（1-2个月）
 
 **核心功能**
 - [ ] 基础架构搭建
@@ -757,7 +1100,7 @@ graph TB
 - 简单的Web界面
 - 基本的API接口
 
-### 11.2 增强阶段（2-3个月）
+### 13.2 增强阶段（2-3个月）
 
 **功能增强**
 - [ ] 意图理解优化
@@ -775,7 +1118,7 @@ graph TB
 - 高级用户界面
 - 实时更新机制
 
-### 11.3 完善阶段（3-4个月）
+### 13.3 完善阶段（3-4个月）
 
 **企业级功能**
 - [ ] 多语言支持
@@ -793,9 +1136,9 @@ graph TB
 - 高可用性保证
 - 完善的文档
 
-## 12. 风险评估
+## 14. 风险评估
 
-### 12.1 技术风险
+### 14.1 技术风险
 
 **性能风险**
 - **大规模代码库**：百万行代码的检索性能
@@ -812,7 +1155,7 @@ graph TB
 - **数据一致性**：分布式数据的一致性保证
 - **服务协调**：多服务间的协调机制
 
-### 12.2 业务风险
+### 14.2 业务风险
 
 **用户接受度**
 - **学习成本**：新工具的学习和使用成本
@@ -824,7 +1167,7 @@ graph TB
 - **技术更新**：技术快速更新带来的挑战
 - **用户流失**：用户转向其他解决方案
 
-### 12.3 缓解策略
+### 14.3 缓解策略
 
 **技术缓解**
 - **原型验证**：早期构建原型验证核心功能
